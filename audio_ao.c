@@ -32,7 +32,10 @@
 #include "common.h"
 #include "audio.h"
 
-ao_device *dev = NULL;
+static ao_device *dev = NULL;
+static ao_sample_format fmt;
+static int driver;
+static ao_option *ao_opts = NULL;
 
 static void help(void) {
     printf("    -d driver           set the output driver\n"
@@ -44,8 +47,7 @@ static void help(void) {
 
 static int init(int argc, char **argv) {
     ao_initialize();
-    int driver = ao_default_driver_id();
-    ao_option *ao_opts = NULL;
+    driver = ao_default_driver_id();
 
     optind = 1; // optind=0 is equivalent to optind=1 plus special behaviour
     argv--;     // so we shift the arguments to satisfy getopt()
@@ -85,7 +87,6 @@ static int init(int argc, char **argv) {
     if (optind < argc)
         die("Invalid audio argument: %s", argv[optind]);
 
-    ao_sample_format fmt;
     memset(&fmt, 0, sizeof(fmt));
 
     fmt.bits = 16;
@@ -93,28 +94,34 @@ static int init(int argc, char **argv) {
     fmt.channels = 2;
     fmt.byte_format = AO_FMT_NATIVE;
 
-    dev = ao_open_live(driver, &fmt, ao_opts);
-
-    return dev ? 0 : 1;
+    return 0;
 }
 
+static void stop(void);
+
 static void deinit(void) {
-    if (dev)
-        ao_close(dev);
-    dev = NULL;
+    stop();
     ao_shutdown();
 }
 
 static void start(int sample_rate) {
     if (sample_rate != 44100)
         die("unexpected sample rate!");
+    stop();
+    dev = ao_open_live(driver, &fmt, ao_opts);
+    if (!dev)
+        warn("ao_open_live failed");
 }
 
 static void play(short buf[], int samples) {
-    ao_play(dev, (char*)buf, samples*4);
+    if (dev)
+	ao_play(dev, (char*)buf, samples*4);
 }
 
 static void stop(void) {
+    if (dev)
+        ao_close(dev);
+    dev = NULL;
 }
 
 audio_output audio_ao = {
